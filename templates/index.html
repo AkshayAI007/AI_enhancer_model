@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>AI Image Enhancer Pro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 25%, #16213e 50%, #0f3460 75%, #533483 100%);
+            --card-gradient: linear-gradient(145deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.95) 100%);
+            --glass-bg: rgba(15, 15, 35, 0.85);
+            --glass-border: rgba(255, 255, 255, 0.15);
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --accent-pink: #f472b6;
+            --accent-emerald: #10b981;
+            --accent-orange: #f97316;
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+            --success: #059669;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--primary-gradient);
+            min-height: 100vh;
+            padding: 20px;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* Animated background particles */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 80%, rgba(59, 130, 246, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(244, 114, 182, 0.1) 0%, transparent 50%),
+                url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff08' fill-opacity='0.05'%3E%3Cpolygon points='50 0 60 40 100 50 60 60 50 100 40 60 0 50 40 40'/%3E%3C/g%3E%3C/svg%3E");
+            animation: float 25s ease-in-out infinite;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(180deg); }
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: var(--glass-bg);
+            border-radius: 32px;
+            backdrop-filter: blur(25px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 
+                0 32px 64px rgba(15, 15, 35, 0.4),
+                0 0 0 1px rgba(255, 255, 255, 0.05),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+            position: relative;
+            z-index: 1;
+            animation: slideUp 0.8s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(40px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .header {
+            background: linear-gradient(135deg, 
+                rgba(59, 130, 246, 0.95) 0%, 
+                rgba(139, 92, 246, 0.95) 30%, 
+                rgba(244, 114, 182, 0.95) 60%,
+                rgba(16, 185, 129, 0.95) 100%);
+            color: white;
+            padding: 60px 40px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            animation: pulse 4s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.3; }
+            50% { transform: scale(1.1) rotate(180deg); opacity: 0.1; }
+        }
+
+        .header-content {
+            position: relative;
+            z-index: 2;
+        }
+
+        .header h1 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-weight: 800;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, #ffffff 0%, #f8faff 50%, #e0f2fe 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            animation: glow 3s ease-in-out infinite alternate;
+            letter-spacing: -0.02em;
+        }
+
+        @keyframes glow {
+            from { filter: drop-shadow(0 0 10px rgba(255,255,255,0.3)); }
+            to { filter: drop-shadow(0 0 20px rgba(255,255,255,0.6)); }
+        }
+
+        .header .emoji {
+            font-size: 3.5rem;
+            display: inline-block;
+            animation: bounce 2s ease-in-out infinite;
+            margin-right: 16px;
+        }
+
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+            40% { transform: translateY(-10px); }
+            60% { transform: translateY(-5px); }
+        }
+
+        .header p {
+            font-size: 1.3rem;
+            opacity: 0.95;
+            font-weight: 400;
+            letter-spacing: 0.5px;
+            margin-bottom: 32px;
+        }
+
+        .feature-badges {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-top: 24px;
+        }
+
+        .badge {
+            padding: 8px 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .badge:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .main-content {
+            padding: 60px 40px;
+        }
+
+        .upload-section {
+            background: var(--card-gradient);
+            border: 3px dashed transparent;
+            background-clip: padding-box;
+            border-radius: 24px;
+            padding: 60px 40px;
+            text-align: center;
+            margin-bottom: 40px;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 
+                0 20px 40px rgba(0, 0, 0, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        .upload-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #667eea, #764ba2, #f093fb);
+            z-index: -1;
+            margin: -3px;
+            border-radius: 24px;
+        }
+
+        .upload-section:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 
+                0 32px 64px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        }
+
+        .upload-section.drag-over {
+            background: linear-gradient(135deg, rgba(79, 70, 229, 0.1) 0%, rgba(236, 72, 153, 0.1) 100%);
+            transform: scale(1.05);
+        }
+
+        .upload-icon {
+            font-size: 4rem;
+            margin-bottom: 24px;
+            animation: float 3s ease-in-out infinite;
+            display: inline-block;
+        }
+
+        .upload-text {
+            font-size: 1.5rem;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+
+        .upload-subtext {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            font-weight: 400;
+            margin-bottom: 32px;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 50%, var(--accent-pink) 100%);
+            color: white;
+            border: none;
+            padding: 16px 40px;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 
+                0 8px 32px rgba(59, 130, 246, 0.4),
+                0 2px 8px rgba(0, 0, 0, 0.1);
+            position: relative;
+            overflow: hidden;
+            letter-spacing: 0.3px;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .btn:hover::before {
+            left: 100%;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 
+                0 16px 48px rgba(59, 130, 246, 0.5),
+                0 4px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn:active {
+            transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .processing {
+            display: none;
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--accent-blue);
+        }
+
+        .spinner-container {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 32px;
+        }
+
+        .spinner {
+            border: 4px solid rgba(79, 70, 229, 0.1);
+            border-top: 4px solid var(--accent-blue);
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        .spinner-glow {
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(79, 70, 229, 0.2) 0%, transparent 70%);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .processing-text {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .processing-subtext {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            opacity: 0.8;
+        }
+
+        .results-section {
+            display: none;
+            margin-top: 40px;
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .results-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .results-header h2 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple), var(--accent-pink), var(--accent-emerald));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 12px;
+            letter-spacing: -0.01em;
+        }
+
+        .results-header .sparkle {
+            font-size: 2rem;
+            animation: sparkle 1.5s ease-in-out infinite;
+            margin: 0 8px;
+        }
+
+        @keyframes sparkle {
+            0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.8; }
+            50% { transform: scale(1.2) rotate(180deg); opacity: 1; }
+        }
+
+        .image-comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 32px;
+            margin: 40px 0;
+        }
+
+        .image-container {
+            background: var(--card-gradient);
+            border-radius: 20px;
+            padding: 32px;
+            text-align: center;
+            box-shadow: 
+                0 20px 40px rgba(0, 0, 0, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .image-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple), var(--accent-pink), var(--accent-emerald));
+        }
+
+        .image-container:hover {
+            transform: translateY(-4px);
+            box-shadow: 
+                0 32px 64px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        }
+
+        .image-container h3 {
+            color: var(--text-primary);
+            margin-bottom: 20px;
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+
+        .image-container img {
+            max-width: 100%;
+            max-height: 400px;
+            border-radius: 16px;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s ease;
+        }
+
+        .image-container img:hover {
+            transform: scale(1.02);
+            box-shadow: 0 20px 48px rgba(0, 0, 0, 0.2);
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 24px;
+            margin: 40px 0;
+        }
+
+        .stat-card {
+            background: var(--card-gradient);
+            padding: 32px 24px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 
+                0 12px 32px rgba(0, 0, 0, 0.08),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple), var(--accent-emerald));
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 
+                0 20px 48px rgba(0, 0, 0, 0.12),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        }
+
+        .stat-value {
+            font-size: 2.2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-weight: 500;
+            font-size: 1rem;
+            letter-spacing: 0.5px;
+        }
+
+        .action-buttons {
+            text-align: center;
+            margin-top: 48px;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .download-btn {
+            background: linear-gradient(135deg, var(--accent-emerald) 0%, #047857 50%, #065f46 100%);
+            box-shadow: 0 8px 32px rgba(16, 185, 129, 0.4);
+        }
+
+        .download-btn:hover {
+            box-shadow: 0 16px 48px rgba(16, 185, 129, 0.5);
+        }
+
+        .reset-btn {
+            background: linear-gradient(135deg, #475569 0%, #334155 50%, #1e293b 100%);
+            box-shadow: 0 8px 32px rgba(71, 85, 105, 0.4);
+        }
+
+        .reset-btn:hover {
+            box-shadow: 0 16px 48px rgba(71, 85, 105, 0.5);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                border-radius: 24px;
+            }
+
+            .header {
+                padding: 40px 24px;
+            }
+
+            .header h1 {
+                font-size: 2.5rem;
+            }
+
+            .main-content {
+                padding: 40px 24px;
+            }
+
+            .upload-section {
+                padding: 40px 24px;
+            }
+
+            .image-comparison {
+                grid-template-columns: 1fr;
+                gap: 24px;
+            }
+
+            .image-container {
+                padding: 24px;
+            }
+
+            .stats {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .btn {
+                width: 100%;
+                max-width: 280px;
+            }
+
+            .feature-badges {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+
+        /* Premium animations */
+        .floating-particles {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .particle {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background: linear-gradient(45deg, rgba(59, 130, 246, 0.6), rgba(139, 92, 246, 0.6));
+            border-radius: 50%;
+            animation: float-particle 8s linear infinite;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+        }
+
+        @keyframes float-particle {
+            0% {
+                transform: translateY(100vh) rotate(0deg);
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(-100vh) rotate(360deg);
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="floating-particles">
+        <div class="particle" style="left: 10%; animation-delay: 0s;"></div>
+        <div class="particle" style="left: 20%; animation-delay: 1s;"></div>
+        <div class="particle" style="left: 30%; animation-delay: 2s;"></div>
+        <div class="particle" style="left: 40%; animation-delay: 3s;"></div>
+        <div class="particle" style="left: 50%; animation-delay: 4s;"></div>
+        <div class="particle" style="left: 60%; animation-delay: 5s;"></div>
+        <div class="particle" style="left: 70%; animation-delay: 0.5s;"></div>
+        <div class="particle" style="left: 80%; animation-delay: 1.5s;"></div>
+        <div class="particle" style="left: 90%; animation-delay: 2.5s;"></div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <div class="header-content">
+                <h1>
+                    <span class="emoji">🚀</span>AI Image Enhancer Pro
+                </h1>
+                <p>Transform your images with cutting-edge AI technology</p>
+                <div class="feature-badges">
+                    <div class="badge">⚡ Lightning Fast</div>
+                    <div class="badge">🎯 Super Resolution</div>
+                    <div class="badge">🔒 Privacy First</div>
+                    <div class="badge">✨ Professional Quality</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="upload-section" id="uploadSection">
+                <div class="upload-icon">📸</div>
+                <div class="upload-text">Drop your image here or click to browse</div>
+                <div class="upload-subtext">Supports JPG, PNG, WebP up to 10MB • Professional AI Enhancement</div>
+                <input type="file" id="fileInput" class="file-input" accept="image/*">
+                <button class="btn" onclick="document.getElementById('fileInput').click()">
+                    🎨 Choose Image to Enhance
+                </button>
+            </div>
+
+            <div class="processing" id="processing">
+                <div class="spinner-container">
+                    <div class="spinner-glow"></div>
+                    <div class="spinner"></div>
+                </div>
+                <div class="processing-text">Enhancing your image with AI magic...</div>
+                <div class="processing-subtext">Our advanced algorithms are working to perfect every pixel</div>
+            </div>
+
+            <div class="results-section" id="resultsSection">
+                <div class="results-header">
+                    <h2>
+                        <span class="sparkle">✨</span>Enhancement Results<span class="sparkle">✨</span>
+                    </h2>
+                </div>
+
+                <div class="image-comparison">
+                    <div class="image-container">
+                        <h3>📷 Original Image</h3>
+                        <img id="originalImage" src="" alt="Original">
+                    </div>
+                    <div class="image-container">
+                        <h3>🎨 Enhanced Image</h3>
+                        <img id="enhancedImage" src="" alt="Enhanced">
+                    </div>
+                </div>
+
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-value" id="processingTime">--</div>
+                        <div class="stat-label">⚡ Processing Time</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="fileSize">--</div>
+                        <div class="stat-label">📊 File Size</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="resolution">--</div>
+                        <div class="stat-label">📐 Resolution</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">AI Pro</div>
+                        <div class="stat-label">🤖 Enhancement Level</div>
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button class="btn download-btn" id="downloadBtn">📥 Download Enhanced Image</button>
+                    <button class="btn reset-btn" onclick="resetApp()">🔄 Process Another Image</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const uploadSection = document.getElementById('uploadSection');
+        const processing = document.getElementById('processing');
+        const resultsSection = document.getElementById('resultsSection');
+        const originalImage = document.getElementById('originalImage');
+        const enhancedImage = document.getElementById('enhancedImage');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        let enhancedImageData = null;
+        let processingStartTime = null;
+
+        // Drag and drop functionality
+        uploadSection.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadSection.classList.add('drag-over');
+        });
+
+        uploadSection.addEventListener('dragleave', () => {
+            uploadSection.classList.remove('drag-over');
+        });
+
+        uploadSection.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadSection.classList.remove('drag-over');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                alert('Please select a valid image file.');
+                return;
+            }
+
+            if (file.size > 10 * 1024 * 1024) {
+                alert('File size must be less than 10MB.');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                originalImage.src = e.target.result;
+                processImage(file);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function processImage(file) {
+            uploadSection.style.display = 'none';
+            processing.style.display = 'block';
+            processingStartTime = Date.now();
+
+            try {
+                await simulateImageEnhancement(file);
+                processing.style.display = 'none';
+                resultsSection.style.display = 'block';
+                updateStats(file);
+            } catch (error) {
+                alert('Error processing image: ' + error.message);
+                resetApp();
+            }
+        }
+
+        async function simulateImageEnhancement(file) {
+            const formData = new FormData();
+            formData.append('image', file);
+
+            const response = await fetch('/api/enhance', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to process image');
+            }
+
+            const blob = await response.blob();
+            const enhancedUrl = URL.createObjectURL(blob);
+            enhancedImage.src = enhancedUrl;
+            enhancedImageData = blob;
+        }
+
+        function updateStats(file) {
+            const processingTime = ((Date.now() - processingStartTime) / 1000).toFixed(1);
+            document.getElementById('processingTime').textContent = processingTime + 's';
+
+            const fileSize = (file.size / (1024 * 1024)).toFixed(2);
+            document.getElementById('fileSize').textContent = fileSize + ' MB';
+
+            const img = new Image();
+            img.onload = () => {
+                document.getElementById('resolution').textContent = img.width + 'x' + img.height;
+            };
+            img.src = originalImage.src;
+        }
+
+        downloadBtn.addEventListener('click', () => {
+            if (enhancedImageData) {
+                const url = URL.createObjectURL(enhancedImageData);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'enhanced_image_pro.png';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+        });
+
+        function resetApp() {
+            uploadSection.style.display = 'block';
+            processing.style.display = 'none';
+            resultsSection.style.display = 'none';
+            fileInput.value = '';
+            enhancedImageData = null;
+        }
+
+        // Add smooth scroll behavior
+        document.documentElement.style.scrollBehavior = 'smooth';
+
+        // Add particle animation randomization
+        const particles = document.querySelectorAll('.particle');
+        particles.forEach((particle, index) => {
+            particle.style.left = Math.random() * 100 + '%';
+            particle.style.animationDelay = Math.random() * 6 + 's';
+            particle.style.animationDuration = (4 + Math.random() * 4) + 's';
+        });
+    </script>
+</body>
+</html>
