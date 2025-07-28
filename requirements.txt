@@ -1,46 +1,32 @@
-beautifulsoup4==4.13.4
-blinker==1.9.0
-certifi==2025.7.14
-charset-normalizer==3.4.2
-click==8.2.1
-colorama==0.4.6
-filelock==3.18.0
-Flask==3.1.1
+# Core Flask and web server
+flask==2.3.3
 flask-cors==6.0.1
-fsspec==2025.7.0
-gdown==5.2.0
-huggingface-hub==0.11.1
-idna==3.10
-itsdangerous==2.2.0
-Jinja2==3.1.6
-MarkupSafe==3.0.2
-mpmath==1.3.0
-networkx==3.5
-numpy==2.2.6
-opencv-python==4.12.0.88
-packaging==25.0
-pillow==11.3.0
-PySocks==1.7.1
-PyYAML==6.0.2
-RealESRGAN @ git+https://github.com/sberbank-ai/Real-ESRGAN.git@362a0316878f41dbdfbb23657b450c3353de5acf
-requests==2.32.4
-setuptools==80.9.0
-soupsieve==2.7
-sympy==1.14.0
-torch==2.7.1
-torchvision==0.22.1
-tqdm==4.67.1
-typing_extensions==4.14.1
-urllib3==2.5.0
+gunicorn==21.2.0
 Werkzeug==3.1.3
 
-flask==2.3.3
-flask-cors==4.0.0
-gunicorn==21.2.0
-pillow==10.0.1
-realesrgan==0.3.0
-numpy==1.24.3
-torch==2.0.1
-torchvision==0.15.2
-gdown==4.7.1
-basicsr==1.4.2
+# Image processing and AI
+torch==2.7.1
+torchvision==0.22.1
+pillow==11.3.0
+opencv-python==4.12.0.88
+numpy==2.2.6
+
+# RealESRGAN - using the working GitHub version
+git+https://github.com/sberbank-ai/Real-ESRGAN.git@362a0316878f41dbdfbb23657b450c3353de5acf
+
+# Utilities
+gdown==5.2.0
+requests==2.32.4
+tqdm==4.67.1
+PyYAML==6.0.2
+
+# Supporting libraries
+beautifulsoup4==4.13.4
+huggingface-hub==0.11.1
+filelock==3.18.0
+fsspec==2025.7.0
+packaging==25.0
+setuptools==80.9.0
+
+# Built-in modules (no need to specify but kept for clarity)
+# sys, os, io, time, threading, gc, concurrent.futures are built-in
