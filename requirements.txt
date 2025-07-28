@@ -8,11 +8,13 @@ Werkzeug==3.1.3
 torch==2.7.1
 torchvision==0.22.1
 pillow==11.3.0
-opencv-python==4.12.0.88
-numpy==2.2.6
+opencv-python-headless==4.12.0.88     # headless avoids GUI-related errors
+numpy==1.26.4                          # compatible with realesrgan stack
 
-# RealESRGAN - using the working GitHub version
-git+https://github.com/sberbank-ai/Real-ESRGAN.git@362a0316878f41dbdfbb23657b450c3353de5acf
+# RealESRGAN stack (official)
+realesrgan==0.3.0
+basicsr==1.4.2
+facexlib==0.3.0
 
 # Utilities
 gdown==5.2.0
@@ -27,6 +29,3 @@ filelock==3.18.0
 fsspec==2025.7.0
 packaging==25.0
 setuptools==80.9.0
-
-# Built-in modules (no need to specify but kept for clarity)
-# sys, os, io, time, threading, gc, concurrent.futures are built-in
