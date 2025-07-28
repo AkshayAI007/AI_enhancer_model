@@ -22,84 +22,112 @@ try:
     print("DEBUG: Imported os")
     import gc
     print("DEBUG: Imported gc")
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
     print("DEBUG: Imported concurrent.futures")
     import threading
     print("DEBUG: Imported threading")
     import time
     print("DEBUG: Imported time")
+    import queue
+    print("DEBUG: Imported queue")
 except Exception as e:
     print(f"Import error: {e}")
     exit(1)
 
 print("DEBUG: All imports successful")
 
+import os
+import gdown
+
 # Performance optimizations
-MODEL_SCALE = 2  # Use 2x instead of 4x for faster processing
+MODEL_SCALE = 4  # Use 2x instead of 4x for faster processing
 WEIGHTS_FOLDER = 'weights'
 WEIGHTS_FILENAME = f'RealESRGAN_x{MODEL_SCALE}.pth'
 WEIGHTS_PATH = os.path.join(WEIGHTS_FOLDER, WEIGHTS_FILENAME)
 
-# Image processing limits
-MAX_IMAGE_SIZE = 1024  # Limit input image size
-TILE_SIZE = 512  # Process in tiles for large images
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB limit
+# Create weights dir if not exists
+os.makedirs(WEIGHTS_FOLDER, exist_ok=True)
 
-# Concurrent processing settings
-MAX_WORKERS = min(4, os.cpu_count() or 1)  # Limit concurrent workers
-THREAD_LOCAL = threading.local()  # For thread-local model instances
+# Download model if not already present
+model_url = f"https://drive.google.com/uc?id=1sydrWWe8VF1oR1sXb904UWFd6Tp4mvKF"
 
-try:
-    os.makedirs(WEIGHTS_FOLDER, exist_ok=True)
-    print("DEBUG: Created weights folder")
-    if not os.path.exists(WEIGHTS_PATH):
-        raise FileNotFoundError(f"Missing weights at {WEIGHTS_PATH}. Please download manually.")
-except Exception as e:
-    print(f"Error preparing weights: {e}")
-    exit(1)
-
-print("DEBUG: Loading model ...")
-try:
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"DEBUG: Using device: {device}")
+if not os.path.exists(WEIGHTS_PATH):
+    print(f"Downloading {WEIGHTS_FILENAME}...")
+    gdown.download(model_url, WEIGHTS_PATH, quiet=False)
     
-    # Performance optimizations for PyTorch
-    if device.type == 'cuda':
-        torch.backends.cudnn.benchmark = True
-        torch.backends.cudnn.deterministic = False
+# Optimized processing parameters
+MAX_IMAGE_SIZE = 2048  # Increased for better quality/speed balance
+TILE_SIZE = 256  # Smaller tiles for better memory usage and parallelization
+OVERLAP = 32  # Overlap for seamless tile blending
+MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB limit
+
+# Enhanced concurrent processing
+MAX_WORKERS = min(8, (os.cpu_count() or 1) * 2)  # More aggressive threading
+BATCH_SIZE = 4  # Process multiple tiles in batches
+
+# Global model cache and memory management
+MODEL_CACHE = {}
+MEMORY_THRESHOLD = 0.8  # GPU memory threshold
+
+def setup_torch_optimizations():
+    """Setup PyTorch optimizations for maximum performance"""
+    # Enable optimizations
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.deterministic = False
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+    
+    # Memory management
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        # Enable memory efficient attention if available
+        try:
+            torch.backends.cuda.enable_flash_sdp(True)
+        except:
+            pass
     else:
         # CPU optimizations
-        torch.set_num_threads(2)  # Reduce per-thread cores for concurrent processing
+        torch.set_num_threads(min(4, os.cpu_count() or 1))
+
+def get_optimized_model():
+    """Get or create an optimized model instance with caching"""
+    thread_id = threading.get_ident()
     
-    # Create main model instance
-    model = RealESRGAN(device, scale=MODEL_SCALE)
-    model.load_weights(WEIGHTS_PATH)
-    model.model.eval()
-    torch.set_grad_enabled(False)
+    if thread_id not in MODEL_CACHE:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        model = RealESRGAN(device, scale=MODEL_SCALE)
+        model.load_weights(WEIGHTS_PATH)
+        model.model.eval()
+        
+        # Model optimizations
+        if hasattr(torch, 'compile') and device.type == 'cuda':
+            try:
+                model.model = torch.compile(model.model, mode='max-autotune')
+                print(f"DEBUG: Model compiled for thread {thread_id}")
+            except:
+                print(f"DEBUG: Compilation failed for thread {thread_id}")
+        
+        # Enable mixed precision if available
+        if device.type == 'cuda':
+            try:
+                model.model = model.model.half()
+                print(f"DEBUG: Enabled FP16 for thread {thread_id}")
+            except:
+                print(f"DEBUG: FP16 not supported for thread {thread_id}")
+        
+        MODEL_CACHE[thread_id] = model
+        print(f"DEBUG: Created optimized model for thread {thread_id}")
     
-    print("DEBUG: Model loaded and optimized!")
-except Exception as e:
-    print(f"Error loading model: {e}")
-    exit(1)
+    return MODEL_CACHE[thread_id]
 
-def get_thread_model():
-    """Get or create a model instance for the current thread"""
-    if not hasattr(THREAD_LOCAL, 'model'):
-        # Create a new model instance for this thread
-        thread_model = RealESRGAN(device, scale=MODEL_SCALE)
-        thread_model.load_weights(WEIGHTS_PATH)
-        thread_model.model.eval()
-        THREAD_LOCAL.model = thread_model
-        print(f"DEBUG: Created model for thread {threading.current_thread().name}")
-    return THREAD_LOCAL.model
-
-app = Flask(__name__)
-CORS(app, origins="*")
-
-def resize_if_too_large(img, max_size=MAX_IMAGE_SIZE):
-    """Resize image if it's too large while maintaining aspect ratio"""
+def smart_resize(img, max_size=MAX_IMAGE_SIZE):
+    """Intelligent resizing with quality preservation"""
     width, height = img.size
-    if max(width, height) > max_size:
+    pixels = width * height
+    
+    # Only resize if significantly larger than max_size
+    if max(width, height) > max_size * 1.5:
+        # Calculate optimal size maintaining aspect ratio
         if width > height:
             new_width = max_size
             new_height = int((height * max_size) / width)
@@ -107,135 +135,207 @@ def resize_if_too_large(img, max_size=MAX_IMAGE_SIZE):
             new_height = max_size
             new_width = int((width * max_size) / height)
         
-        print(f"DEBUG: Resizing from {img.size} to ({new_width}, {new_height})")
+        # Use high-quality resampling
+        print(f"DEBUG: Smart resize from {img.size} to ({new_width}, {new_height})")
         return img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    
     return img
 
-def process_tile(args):
-    """Process a single tile - designed for concurrent execution"""
-    tile_data, tile_info, tile_id = args
-    
-    try:
-        # Get thread-local model instance
-        thread_model = get_thread_model()
-        
-        # Process the tile
-        with torch.no_grad():
-            enhanced_tile = thread_model.predict(tile_data)
-        
-        # Clean up thread-local memory
-        if device.type == 'cuda':
-            torch.cuda.empty_cache()
-        
-        print(f"DEBUG: Processed tile {tile_id}")
-        return tile_id, enhanced_tile, tile_info
-        
-    except Exception as e:
-        print(f"DEBUG: Error processing tile {tile_id}: {e}")
-        return tile_id, None, tile_info
-
-def process_in_tiles_concurrent(img_array, tile_size=TILE_SIZE):
-    """Process large images in tiles using concurrent processing"""
+def create_overlapping_tiles(img_array, tile_size=TILE_SIZE, overlap=OVERLAP):
+    """Create overlapping tiles for seamless reconstruction"""
     h, w, c = img_array.shape
     
-    if h <= tile_size and w <= tile_size:
-        # Small enough to process normally
+    tiles = []
+    positions = []
+    
+    stride = tile_size - overlap
+    
+    # Calculate tile positions
+    y_positions = list(range(0, h - tile_size + 1, stride))
+    if y_positions[-1] + tile_size < h:
+        y_positions.append(h - tile_size)
+    
+    x_positions = list(range(0, w - tile_size + 1, stride))
+    if x_positions[-1] + tile_size < w:
+        x_positions.append(w - tile_size)
+    
+    # Extract tiles
+    for y in y_positions:
+        for x in x_positions:
+            tile = img_array[y:y+tile_size, x:x+tile_size].copy()
+            tiles.append(tile)
+            positions.append((y, x))
+    
+    return tiles, positions
+
+def blend_tiles(output, enhanced_tile, y, x, tile_size, overlap, scale):
+    """Blend tiles with overlap for seamless reconstruction"""
+    output_y = y * scale
+    output_x = x * scale
+    output_tile_size = tile_size * scale
+    output_overlap = overlap * scale
+    
+    # Simple replacement for now - can be enhanced with alpha blending
+    output[output_y:output_y+output_tile_size, 
+           output_x:output_x+output_tile_size] = enhanced_tile
+
+def process_tile_batch(args):
+    """Process a batch of tiles together for better efficiency"""
+    batch_tiles, batch_positions, batch_id = args
+    
+    try:
+        model = get_optimized_model()
+        enhanced_tiles = []
+        
+        # Process tiles in the batch
         with torch.no_grad():
-            return model.predict(img_array)
+            if torch.cuda.is_available():
+                # Use autocast for mixed precision
+                with torch.cuda.amp.autocast():
+                    for tile in batch_tiles:
+                        enhanced_tile = model.predict(tile)
+                        enhanced_tiles.append(enhanced_tile)
+            else:
+                for tile in batch_tiles:
+                    enhanced_tile = model.predict(tile)
+                    enhanced_tiles.append(enhanced_tile)
+        
+        # Memory cleanup
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        
+        print(f"DEBUG: Processed batch {batch_id} with {len(batch_tiles)} tiles")
+        return batch_id, enhanced_tiles, batch_positions
+        
+    except Exception as e:
+        print(f"DEBUG: Error processing batch {batch_id}: {e}")
+        return batch_id, None, batch_positions
+
+def process_with_batched_tiles(img_array, tile_size=TILE_SIZE, overlap=OVERLAP):
+    """Enhanced tile processing with batching and overlap"""
+    h, w, c = img_array.shape
     
-    print(f"DEBUG: Processing {h}x{w} image in tiles of {tile_size}x{tile_size} with {MAX_WORKERS} workers")
+    # Check if small enough to process directly
+    if h <= tile_size and w <= tile_size:
+        model = get_optimized_model()
+        with torch.no_grad():
+            if torch.cuda.is_available():
+                with torch.cuda.amp.autocast():
+                    return model.predict(img_array)
+            else:
+                return model.predict(img_array)
     
-    # Calculate number of tiles
-    h_tiles = (h + tile_size - 1) // tile_size
-    w_tiles = (w + tile_size - 1) // tile_size
-    total_tiles = h_tiles * w_tiles
+    print(f"DEBUG: Processing {h}x{w} image with batched overlapping tiles")
     
-    # Initialize output array
+    # Create overlapping tiles
+    tiles, positions = create_overlapping_tiles(img_array, tile_size, overlap)
+    total_tiles = len(tiles)
+    
+    # Group tiles into batches
+    tile_batches = []
+    position_batches = []
+    
+    for i in range(0, total_tiles, BATCH_SIZE):
+        batch_tiles = tiles[i:i+BATCH_SIZE]
+        batch_positions = positions[i:i+BATCH_SIZE]
+        tile_batches.append(batch_tiles)
+        position_batches.append(batch_positions)
+    
+    # Initialize output
     scale = MODEL_SCALE
     output = np.zeros((h * scale, w * scale, c), dtype=np.uint8)
     
-    # Prepare tile tasks
-    tile_tasks = []
-    tile_id = 0
-    
-    for i in range(h_tiles):
-        for j in range(w_tiles):
-            # Calculate tile boundaries
-            y_start = i * tile_size
-            y_end = min((i + 1) * tile_size, h)
-            x_start = j * tile_size
-            x_end = min((j + 1) * tile_size, w)
-            
-            # Extract tile
-            tile = img_array[y_start:y_end, x_start:x_end].copy()
-            
-            # Store tile info for reconstruction
-            tile_info = {
-                'output_y_start': y_start * scale,
-                'output_y_end': y_end * scale,
-                'output_x_start': x_start * scale,
-                'output_x_end': x_end * scale
-            }
-            
-            tile_tasks.append((tile, tile_info, tile_id))
-            tile_id += 1
-    
-    # Process tiles concurrently
+    # Process batches concurrently
     start_time = time.time()
-    completed_tiles = 0
+    completed_batches = 0
+    total_batches = len(tile_batches)
     
-    # Use ThreadPoolExecutor for CPU-bound tasks with I/O
-    # For pure CPU tasks, ProcessPoolExecutor might be better but has more overhead
+    # Prepare batch tasks
+    batch_tasks = [(tile_batches[i], position_batches[i], i) 
+                   for i in range(total_batches)]
+    
+    # Use ThreadPoolExecutor for I/O bound with some CPU work
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        # Submit all tasks
-        future_to_tile = {executor.submit(process_tile, task): task for task in tile_tasks}
+        future_to_batch = {executor.submit(process_tile_batch, task): task 
+                          for task in batch_tasks}
         
-        # Collect results as they complete
-        for future in as_completed(future_to_tile):
+        for future in as_completed(future_to_batch):
             try:
-                tile_id, enhanced_tile, tile_info = future.result()
-                completed_tiles += 1
+                batch_id, enhanced_tiles, batch_positions = future.result()
+                completed_batches += 1
                 
-                if enhanced_tile is not None:
-                    # Place enhanced tile in output
-                    output[tile_info['output_y_start']:tile_info['output_y_end'], 
-                           tile_info['output_x_start']:tile_info['output_x_end']] = enhanced_tile
-                else:
-                    print(f"DEBUG: Failed to process tile {tile_id}")
+                if enhanced_tiles is not None:
+                    # Reconstruct with blending
+                    for enhanced_tile, (y, x) in zip(enhanced_tiles, batch_positions):
+                        blend_tiles(output, enhanced_tile, y, x, tile_size, overlap, scale)
                 
-                # Progress update
-                progress = (completed_tiles / total_tiles) * 100
+                # Progress tracking
+                progress = (completed_batches / total_batches) * 100
                 elapsed = time.time() - start_time
-                eta = (elapsed / completed_tiles) * (total_tiles - completed_tiles) if completed_tiles > 0 else 0
+                eta = (elapsed / completed_batches) * (total_batches - completed_batches) if completed_batches > 0 else 0
                 
-                print(f"DEBUG: Progress: {completed_tiles}/{total_tiles} ({progress:.1f}%) - "
+                print(f"DEBUG: Batch progress: {completed_batches}/{total_batches} ({progress:.1f}%) - "
                       f"Elapsed: {elapsed:.1f}s, ETA: {eta:.1f}s")
                 
             except Exception as e:
-                print(f"DEBUG: Error collecting tile result: {e}")
+                print(f"DEBUG: Error in batch processing: {e}")
     
     total_time = time.time() - start_time
-    print(f"DEBUG: Concurrent tile processing completed in {total_time:.2f}s")
+    print(f"DEBUG: Batched processing completed in {total_time:.2f}s")
     
-    # Clean up memory
+    # Cleanup
+    del tiles, positions
     gc.collect()
-    if device.type == 'cuda':
+    if torch.cuda.is_available():
         torch.cuda.empty_cache()
     
     return output
+
+def check_memory_usage():
+    """Monitor memory usage and trigger cleanup if needed"""
+    if torch.cuda.is_available():
+        memory_allocated = torch.cuda.memory_allocated() / torch.cuda.max_memory_allocated()
+        if memory_allocated > MEMORY_THRESHOLD:
+            torch.cuda.empty_cache()
+            gc.collect()
+            return True
+    return False
+
+# Initialize optimizations
+setup_torch_optimizations()
+
+# Create weights dir and load model
+os.makedirs(WEIGHTS_FOLDER, exist_ok=True)
+
+if not os.path.exists(WEIGHTS_PATH):
+    print(f"Downloading {WEIGHTS_FILENAME}...")
+    # Add download logic here
+    raise FileNotFoundError(f"Missing weights at {WEIGHTS_PATH}. Please download manually.")
+
+print("DEBUG: Setting up Flask app...")
+
+app = Flask(__name__)
+CORS(app, origins="*")
+
+# Warm up the model
+print("DEBUG: Warming up model...")
+try:
+    dummy_img = np.random.randint(0, 255, (64, 64, 3), dtype=np.uint8)
+    _ = get_optimized_model()
+    print("DEBUG: Model warmed up successfully!")
+except Exception as e:
+    print(f"DEBUG: Model warmup failed: {e}")
 
 @app.route('/api/enhance', methods=['POST'])
 def enhance_image():
     print("DEBUG: /api/enhance called")
     
     if 'image' not in request.files:
-        print("DEBUG: No image provided")
         return jsonify({'error': 'No image provided.'}), 400
     
     file = request.files['image']
     
     if file.filename == '':
-        print("DEBUG: Empty filename")
         return jsonify({'error': 'No image selected.'}), 400
     
     # Check file size
@@ -247,11 +347,12 @@ def enhance_image():
         return jsonify({'error': f'File too large. Maximum size is {MAX_FILE_SIZE//1024//1024}MB'}), 400
     
     try:
+        # Fast image loading and preprocessing
         img = Image.open(file.stream).convert('RGB')
-        print(f"DEBUG: Image opened - Original size: {img.size}")
+        print(f"DEBUG: Original size: {img.size}")
         
-        # Resize if too large
-        img = resize_if_too_large(img)
+        # Smart resizing
+        img = smart_resize(img)
         print(f"DEBUG: Processing size: {img.size}")
         
     except Exception as e:
@@ -259,94 +360,118 @@ def enhance_image():
         return jsonify({'error': 'Invalid image format.'}), 400
     
     try:
-        print("DEBUG: Starting model prediction...")
+        print("DEBUG: Starting optimized enhancement...")
+        start_time = time.time()
+        
+        # Convert to numpy array
         img_array = np.array(img)
-        print(f"DEBUG: Input array shape: {img_array.shape}")
         
-        # Process image with concurrent tiling
-        processing_start = time.time()
+        # Memory check before processing
+        check_memory_usage()
         
+        # Process with optimized batched tiles
         if max(img_array.shape[:2]) > TILE_SIZE:
-            sr_img_array = process_in_tiles_concurrent(img_array, TILE_SIZE)
+            sr_img_array = process_with_batched_tiles(img_array, TILE_SIZE, OVERLAP)
         else:
+            model = get_optimized_model()
             with torch.no_grad():
-                sr_img_array = model.predict(img_array)
+                if torch.cuda.is_available():
+                    with torch.cuda.amp.autocast():
+                        sr_img_array = model.predict(img_array)
+                else:
+                    sr_img_array = model.predict(img_array)
         
-        processing_time = time.time() - processing_start
-        print(f"DEBUG: Model prediction completed in {processing_time:.2f}s")
+        processing_time = time.time() - start_time
+        print(f"DEBUG: Enhancement completed in {processing_time:.2f}s")
         
-        # Convert to PIL Image
+        # Convert result
         if isinstance(sr_img_array, np.ndarray):
             sr_img = Image.fromarray(sr_img_array)
-            print("DEBUG: Converted ndarray to Image")
         else:
             sr_img = sr_img_array
         
-        print(f"DEBUG: Enhanced image size: {sr_img.size}")
+        print(f"DEBUG: Enhanced size: {sr_img.size}")
         
-        # Clean up memory
+        # Cleanup
         del img_array, sr_img_array
-        if device.type == 'cuda':
-            torch.cuda.empty_cache()
-        gc.collect()
-            
+        check_memory_usage()
+        
     except Exception as e:
         print(f"DEBUG: Enhancement failed: {e}")
         import traceback
-        print(f"DEBUG: Full traceback: {traceback.format_exc()}")
+        print(f"DEBUG: Traceback: {traceback.format_exc()}")
         return jsonify({'error': f'Enhancement failed: {str(e)}'}), 500
     
     try:
+        # Optimized image saving
         byte_io = io.BytesIO()
-        # Use JPEG for smaller file size if quality is acceptable
-        if sr_img.size[0] * sr_img.size[1] > 2000000:  # Large images
-            sr_img.save(byte_io, 'JPEG', quality=95, optimize=True)
+        
+        # Smart format selection
+        pixels = sr_img.size[0] * sr_img.size[1]
+        if pixels > 4000000:  # Very large images
+            sr_img.save(byte_io, 'JPEG', quality=92, optimize=True, progressive=True)
             mimetype = 'image/jpeg'
         else:
-            sr_img.save(byte_io, 'PNG', optimize=True)
+            sr_img.save(byte_io, 'PNG', optimize=True, compress_level=6)
             mimetype = 'image/png'
         
         byte_io.seek(0)
         print("DEBUG: Image saved to buffer")
         
-        # Clean up
+        # Final cleanup
         del sr_img
         gc.collect()
         
         return send_file(byte_io, mimetype=mimetype)
+        
     except Exception as e:
         print(f"DEBUG: Error saving image: {e}")
         return jsonify({'error': f'Error saving enhanced image: {str(e)}'}), 500
 
 @app.route('/api/status')
 def get_status():
-    """Get current system status"""
-    return jsonify({
+    """Enhanced status with performance metrics"""
+    status = {
         'status': 'healthy',
-        'device': str(device),
+        'device': str(torch.device('cuda' if torch.cuda.is_available() else 'cpu')),
         'model_scale': MODEL_SCALE,
         'max_image_size': MAX_IMAGE_SIZE,
         'tile_size': TILE_SIZE,
+        'overlap': OVERLAP,
+        'batch_size': BATCH_SIZE,
         'max_workers': MAX_WORKERS,
         'cpu_count': os.cpu_count(),
         'cuda_available': torch.cuda.is_available(),
-        'cuda_memory': torch.cuda.get_device_properties(0).total_memory if torch.cuda.is_available() else None
-    })
+        'active_models': len(MODEL_CACHE),
+        'optimizations': {
+            'torch_compile': hasattr(torch, 'compile'),
+            'mixed_precision': torch.cuda.is_available(),
+            'cudnn_benchmark': torch.backends.cudnn.benchmark if torch.cuda.is_available() else False
+        }
+    }
+    
+    if torch.cuda.is_available():
+        status['cuda_memory'] = {
+            'total': torch.cuda.get_device_properties(0).total_memory,
+            'allocated': torch.cuda.memory_allocated(),
+            'cached': torch.cuda.memory_reserved()
+        }
+    
+    return jsonify(status)
 
 @app.route('/test')
 def test():
-    return jsonify({'status': 'Flask is working!', 'message': 'Test endpoint successful'})
+    return jsonify({'status': 'Flask is working!', 'message': 'Optimized version ready'})
 
 @app.route('/health')
 def health_check():
-    return jsonify({'status': 'healthy', 'message': 'API is running'})
+    return jsonify({'status': 'healthy', 'message': 'Optimized API is running'})
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
 if __name__ == '__main__':
-    print("DEBUG: Starting Flask app on port 5000")
-    import os
+    print("DEBUG: Starting optimized Flask app")
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port) # Disable debug mode for production
+    app.run(host="0.0.0.0", port=port, threaded=True)
