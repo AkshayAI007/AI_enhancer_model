@@ -170,7 +170,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Contact
 
-- **GitHub**: [@yourusername](https://github.com/AkshayAI007)
+- **GitHub**: [@AkshayAI007](https://github.com/AkshayAI007)
 - **Email**: akshay.aiml007@gmail.com
 - **LinkedIn**: [Akshay Bawaliwale](https://linkedin.com/in/akshaybawaliwale)
 
